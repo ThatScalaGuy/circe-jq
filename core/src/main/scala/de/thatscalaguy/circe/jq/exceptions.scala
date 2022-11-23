@@ -29,7 +29,7 @@ object exceptions {
 
   final class InvalidFilter(terms: NonEmptyList[Term])
       extends Throwable(s"unable to handle expression $terms")
-  
+
   final class InvalidTermType(term: Term)
       extends Throwable(s"invalid term type $term")
 
