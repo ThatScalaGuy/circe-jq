@@ -40,7 +40,6 @@ final class JqOps private[syntax] (wrapped: Json) {
       case NonEmptyList(head, tail) if tail.isEmpty => runTerm(head.terms, data)
       case NonEmptyList(head, tail) =>
         runFilter(NonEmptyList.fromListUnsafe(tail), runTerm(head.terms, data))
-      case e => throw new InvalidFilter(e)
     }
 
   private def runTerm(terms: NonEmptyList[Term], data: Json): Json =

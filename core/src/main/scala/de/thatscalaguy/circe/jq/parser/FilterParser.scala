@@ -22,8 +22,8 @@ import cats.data.NonEmptyList
 
 object FilterParser {
   private val recursiveTerm: Parser[Term] = rec.map(_ => RecTerm)
-  private val stringTerm: Parser[Term] = string.map(StringTerm)
-  private val numberTerm: Parser[Term] = num.map(NumberTerm)
+  private val stringTerm: Parser[Term] = string.map(StringTerm.apply)
+  private val numberTerm: Parser[Term] = num.map(NumberTerm.apply)
 
   private val sliceOrIndex
       : Parser[((Either[Term, (Term, Term)]), Option[Unit])] = {
@@ -81,7 +81,8 @@ object FilterParser {
       .repSep(comma)
       .repSep(pipe)
   }
-  val parser: Parser[Filter] = seqTermParser.map(t => Filter(t.map(ListTerm)))
+  val parser: Parser[Filter] =
+    seqTermParser.map(t => Filter(t.map(ListTerm.apply)))
 
   val expression: Parser[Filter] =
     parser.surroundedBy(space.?).between(lrbracket, rrbracket)
