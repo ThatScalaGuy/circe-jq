@@ -1,6 +1,8 @@
 # circe-jq
 
-Run jq filter on circe json objects
+Run jq filter on circe json objects.
+
+For more detail go (here)[https://thatscalaguy.github.io/circe-jq/].
 
 Inspired by [scalajq](https://github.com/6u1ll4um3/scalajq)
 
