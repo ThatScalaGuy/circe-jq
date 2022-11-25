@@ -19,7 +19,6 @@ package de.thatscalaguy.circe.jq
 import io.circe.Json
 import de.thatscalaguy.circe.jq.syntax.all._
 import de.thatscalaguy.circe.jq.exceptions.InvalidExpression
-import de.thatscalaguy.circe.jq.parser.ObjectParser
 
 class MainSuite extends munit.FunSuite {
 
