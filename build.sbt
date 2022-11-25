@@ -4,7 +4,7 @@ lazy val V = new {
   val catsParse = "0.3.7"
 }
 
-ThisBuild / tlBaseVersion := "0.0" // your current series x.y
+ThisBuild / tlBaseVersion := "0.1" // your current series x.y
 
 ThisBuild / organization := "de.thatscalaguy"
 ThisBuild / organizationName := "ThatScalaGuy"

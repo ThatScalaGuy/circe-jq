@@ -22,7 +22,7 @@ import de.thatscalaguy.circe.jq.exceptions.InvalidExpression
 
 class MainSuite extends munit.FunSuite {
 
-  test("`jq` should thorw a InvalidExpression on invalid input") {
+  test("`jq` should throw a InvalidExpression on invalid input") {
     intercept[InvalidExpression] {
       Json.Null.jq("invalid query")
     }
