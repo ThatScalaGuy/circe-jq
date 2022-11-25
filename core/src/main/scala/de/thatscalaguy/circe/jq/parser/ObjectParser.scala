@@ -20,7 +20,6 @@ import cats.parse.Rfc5234.{alpha}
 import cats.parse.Parser
 import de.thatscalaguy.circe.jq.Pair
 import de.thatscalaguy.circe.jq
-import scala.annotation.meta.companionObject
 
 object ObjectParser {
 

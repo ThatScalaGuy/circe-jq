@@ -32,7 +32,7 @@ Inspired by [scalajq](https://github.com/6u1ll4um3/scalajq)
 - Pipe \
 ```json.jq(".user | .name")```
 - Object creation\
-```json.jq("{key:.value}")
+```json.jq("{key:.value}")```
 
 ## License
 
