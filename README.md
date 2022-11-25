@@ -31,6 +31,8 @@ Inspired by [scalajq](https://github.com/6u1ll4um3/scalajq)
 ```json.jq(".[1:3]")```
 - Pipe \
 ```json.jq(".user | .name")```
+- Object creation\
+```json.jq("{key:.value}")
 
 ## License
 

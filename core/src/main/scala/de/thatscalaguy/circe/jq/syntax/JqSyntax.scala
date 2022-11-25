@@ -16,7 +16,7 @@
 
 package de.thatscalaguy.circe.jq.syntax
 
-import de.thatscalaguy.circe.jq.parser.FilterParser
+import de.thatscalaguy.circe.jq.parser.combinedParser
 import de.thatscalaguy.circe.jq.exceptions._
 import io.circe.Json
 import cats.data.NonEmptyList
@@ -33,7 +33,6 @@ private final case class JqFunction(fn: Json => Json) {
 }
 
 final class JqOps private[syntax] (wrapped: Json) {
-  private val cominedParser = (FilterParser.parser)
 
   private def runFilter(terms: NonEmptyList[ListTerm], data: Json): Json =
     terms match {
@@ -49,16 +48,35 @@ final class JqOps private[syntax] (wrapped: Json) {
       case nel => R.termsToJsArray(nel, data)
     }
 
+  private def runObject(obj: Object, data: Json): Json = {
+    obj.nodes
+      .map { pair =>
+        val name = pair.name match {
+          case f: Filter => runFilter(f.terms, data).asString.get
+          case s: String => s
+          case e => throw new Exception(s"unable to handle expression $e")
+        }
+
+        pair.value match {
+          case Array(filters) =>
+            Json.obj(name -> runFilter(filters.terms, data))
+          case Filter(terms) => Json.obj(name -> runFilter(terms, data))
+          case obj: Object   => Json.obj(name -> runObject(obj, data))
+        }
+      }
+      .foldLeft(Json.obj())((a, b) => a.deepMerge(b))
+  }
+
   private def run(exp: Output, data: Json): Json = {
     exp match {
-      case Filter(terms) => runFilter(terms, data)
-      case _             => data // TODO: temp
+      case Filter(terms)  => runFilter(terms, data)
+      case Array(filters) => runFilter(filters.terms, data)
+      case obj: Object    => runObject(obj, data)
     }
-
   }
 
   def jq(query: String): Json = {
-    cominedParser.parseAll(query) match {
+    combinedParser.parseAll(query) match {
       case Left(value)  => throw new InvalidExpression(query, value)
       case Right(value) => run(value, wrapped)
     }

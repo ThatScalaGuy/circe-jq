@@ -21,6 +21,10 @@ import cats.parse.Rfc5234.{alpha, dquote, digit}
 import cats.parse.Numbers.nonNegativeIntString
 
 package object parser {
+
+  val combinedParser: Parser[Output] =
+    (FilterParser.parser.backtrack | ArrayParser.parser.backtrack | ObjectParser.parser)
+
   private[parser] lazy val rec = Parser.string("..")
   private[parser] lazy val dot = Parser.char('.')
   private[parser] lazy val space = Parser.char(' ')
@@ -31,6 +35,8 @@ package object parser {
   private[parser] lazy val rbracket = Parser.char(']')
   private[parser] lazy val lrbracket = Parser.char('(')
   private[parser] lazy val rrbracket = Parser.char(')')
+  private[parser] lazy val lcbracket = Parser.char('{')
+  private[parser] lazy val rcbracket = Parser.char('}')
   private[parser] lazy val line = Parser.charIn('_')
   private[parser] lazy val string =
     (alpha | digit | line).surroundedBy(dquote.?).repAs[String]

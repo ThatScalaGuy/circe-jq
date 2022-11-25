@@ -19,6 +19,7 @@ package de.thatscalaguy.circe.jq
 import io.circe.Json
 import de.thatscalaguy.circe.jq.syntax.all._
 import de.thatscalaguy.circe.jq.exceptions.InvalidExpression
+import de.thatscalaguy.circe.jq.parser.ObjectParser
 
 class MainSuite extends munit.FunSuite {
 
@@ -88,7 +89,7 @@ class MainSuite extends munit.FunSuite {
     assertEquals(data.jq(".full_name | .[0:4]"), res)
   }
 
-  test("arrry index") {
+  test("array index") {
     val data = Json.arr(
       Json.fromString("Sven"),
       Json.fromString("Max"),
@@ -97,5 +98,21 @@ class MainSuite extends munit.FunSuite {
     assertEquals(data.jq(".[0]"), Json.fromString("Sven"))
     assertEquals(data.jq(".[1]"), Json.fromString("Max"))
     assertEquals(data.jq(".[2]"), Json.fromString("Phineas"))
+  }
+
+  test("create simple objects") {
+    val data = Json.obj(
+      "name" -> Json.fromString("Sven"),
+      "attr" -> Json.obj("age" -> Json.fromInt(35))
+    )
+
+    val res = Json.obj("test" -> Json.fromString("Sven"))
+
+    assertEquals(data.jq("{test:.name}"), res)
+    assertEquals(data.jq("{ test:.name }"), res)
+    assertEquals(data.jq("{ test : .name }"), res)
+    assertEquals(data.jq("{ test:.name}"), res)
+    assertEquals(data.jq("{ test: .name}"), res)
+    assertEquals(data.jq("{test:.name }"), res)
   }
 }

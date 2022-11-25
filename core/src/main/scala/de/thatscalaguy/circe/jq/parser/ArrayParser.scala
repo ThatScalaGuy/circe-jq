@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package de.thatscalaguy.circe.jq
+package de.thatscalaguy.circe.jq.parser
 
-import cats.data.NonEmptyList
+import de.thatscalaguy.circe.jq
 
-sealed trait Output
-case class Array(filters: Filter) extends Output
-case class Object(nodes: NonEmptyList[Pair]) extends Output
-case class Filter(terms: NonEmptyList[ListTerm]) extends Output
+object ArrayParser {
+  val parser =
+    FilterParser.parser.between(lbracket, rbracket).map(jq.Array.apply)
+}
