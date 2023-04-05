@@ -1,5 +1,5 @@
 lazy val V = new {
-  val circe = "0.14.3"
+  val circe = "0.14.5"
   val munit = "0.7.29"
   val catsParse = "0.3.9"
 }
