@@ -1,7 +1,7 @@
 lazy val V = new {
-  val circe = "0.14.5"
-  val munit = "0.7.29"
-  val catsParse = "0.3.10"
+  val circe = "0.14.15"
+  val munit = "1.0.4"
+  val catsParse = "1.0.0"
 }
 
 ThisBuild / tlBaseVersion := "0.1" // your current series x.y
@@ -15,14 +15,11 @@ ThisBuild / developers := List(
   tlGitHubDev("ThatScalaGuy", "Sven Herrmann")
 )
 
-// publish to s01.oss.sonatype.org (set to true to publish to oss.sonatype.org instead)
-ThisBuild / tlSonatypeUseLegacyHost := false
-
 // publish website from this branch
 ThisBuild / tlSitePublishBranch := Some("main")
 
-val Scala213 = "2.13.12"
-val Scala3 = "3.3.1"
+val Scala213 = "2.13.18"
+val Scala3 = "3.3.4"
 ThisBuild / crossScalaVersions := Seq(Scala213, Scala3)
 ThisBuild / scalaVersion := Scala213 // the default Scala
 

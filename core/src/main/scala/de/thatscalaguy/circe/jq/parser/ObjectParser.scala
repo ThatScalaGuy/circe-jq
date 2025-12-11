@@ -20,25 +20,40 @@ import cats.parse.Rfc5234.{alpha}
 import cats.parse.Parser
 import de.thatscalaguy.circe.jq.Pair
 import de.thatscalaguy.circe.jq
+import de.thatscalaguy.circe.jq.{ListFieldTerm, FieldTerm, ListTerm}
+import cats.data.NonEmptyList
 
 object ObjectParser {
 
   private val name: Parser[String] =
-    space.?.with1 *> (alpha | line)
-      .repAs[String]
+    (alpha | line).repAs[String]
 
-  private val pair: Parser[Pair] =
-    ((FilterParser.expression.backtrack | name) ~ colon.surroundedBy(
-      space.?
-    ) ~ (FilterParser.parser.backtrack | ArrayParser.parser))
-      .map { case ((k, _), v) =>
-        Pair(k, v)
-      }
+  private lazy val value: Parser[jq.Output] =
+    Parser.defer(
+      FilterParser.singleExpr.backtrack |
+        ArrayParser.parser.backtrack |
+        parser.backtrack
+    )
+
+  private lazy val pairWithColon: Parser[Pair] =
+    (space.?.with1 *> (FilterParser.expression.backtrack | name) ~ colon
+      .surroundedBy(space.?) ~ value)
+      .map { case ((k, _), v) => Pair(k, v) }
+
+  private lazy val pairShorthand: Parser[Pair] =
+    (space.?.with1 *> name).map { n =>
+      // `{foo}` is shorthand for `{foo: .foo}`
+      val term = ListFieldTerm(NonEmptyList.one(FieldTerm(n, optional = false)))
+      val filter = jq.Filter(NonEmptyList.one(ListTerm(NonEmptyList.one(term))))
+      Pair(n, filter)
+    }
+
+  private lazy val pair: Parser[Pair] = pairWithColon.backtrack | pairShorthand
 
   val parser: Parser[jq.Object] =
     pair
-      .repSep(comma)
-      .between(lcbracket, rcbracket)
+      .repSep(comma.surroundedBy(space.?))
+      .between(lcbracket.surroundedBy(space.?), rcbracket.surroundedBy(space.?))
       .map(jq.Object.apply)
 
 }

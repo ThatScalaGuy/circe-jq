@@ -38,8 +38,17 @@ package object parser {
   private[parser] lazy val lcbracket = Parser.char('{')
   private[parser] lazy val rcbracket = Parser.char('}')
   private[parser] lazy val line = Parser.charIn('_')
-  private[parser] lazy val string =
-    (alpha | digit | line).surroundedBy(dquote.?).repAs[String]
+
+  private[parser] lazy val identifierString: Parser[String] =
+    (alpha | digit | line).repAs[String]
+
+  // Minimal quoted-string support for jq-like filters.
+  // Escapes are not supported yet (e.g. " or \n).
+  private[parser] lazy val quotedString: Parser[String] =
+    (dquote *> Parser.charWhere(_ != '"').rep0.string <* dquote)
+
+  private[parser] lazy val string: Parser[String] =
+    quotedString.backtrack | identifierString
   private[parser] lazy val num =
     (Parser
       .char('-')
@@ -47,8 +56,10 @@ package object parser {
       .with1 ~ nonNegativeIntString ~ (dot ~ nonNegativeIntString).?).string
       .map(_.toDouble)
 
+  // `.foo` or `."foo$"` (keys that are not identifier-like must be quoted)
   private[parser] lazy val field =
-    ((space.?.with1 *> dot) *> (alpha | line).repAs[String])
+    (space.?.with1 *> dot) *> (quotedString.backtrack | (alpha | line)
+      .repAs[String])
 
   private[parser] lazy val optional = Parser.char('?').?
 }

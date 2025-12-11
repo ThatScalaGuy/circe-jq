@@ -17,8 +17,18 @@
 package de.thatscalaguy.circe.jq
 
 sealed trait Model
-case class SliceOrIndexModel(
-    start: Term,
+
+// `.[start:end]` - slice with optional start/end bounds
+case class SliceModel(
+    start: Option[Term],
     end: Option[Term],
     optional: Boolean
 ) extends Model
+
+// `.[n]` or `.["key"]` - single index access
+case class IndexModel(
+    index: Term,
+    optional: Boolean
+) extends Model
+
+case class IteratorModel(optional: Boolean) extends Model

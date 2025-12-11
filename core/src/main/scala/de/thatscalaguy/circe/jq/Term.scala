@@ -30,8 +30,9 @@ case class NumberTerm(value: Double) extends Term
 case class BooleanTerm(value: Boolean) extends Term
 case class SliceTerm(
     term: Term,
-    start: Term,
-    end: Term,
+    start: Option[Term],
+    end: Option[Term],
     optional: Boolean
 ) extends Term
 case class IndexTerm(term: Term, exp: Term, optional: Boolean) extends Term
+case class IteratorTerm(term: Term, optional: Boolean) extends Term

@@ -21,170 +21,191 @@ import cats.data.NonEmptyList
 import de.thatscalaguy.circe.jq.exceptions._
 
 object Runtime {
-  final case class RuntimeF(fn: Json => Json) {
-    def apply(in: Json): Json = fn(in)
+
+  /** Evaluate a term as a jq value stream. jq is stream-oriented: each
+    * expression can output 0..N values.
+    */
+  def eval(term: Term, input: Json): Vector[Json] = term match {
+    case IdentityTerm   => Vector(input)
+    case NullTerm       => Vector(Json.Null)
+    case StringTerm(v)  => Vector(Json.fromString(v))
+    case NumberTerm(v)  => Vector(Json.fromDoubleOrNull(v))
+    case BooleanTerm(v) => Vector(Json.fromBoolean(v))
+
+    // Recursive descent: outputs every value, including the input.
+    case RecTerm => recursiveDescent(input)
+
+    // Sequential chaining, e.g. `.foo[0].bar`.
+    // Comma semantics are handled at the filter stage level (see JqSyntax).
+    case ListTerm(terms) =>
+      terms.toList.foldLeft(Vector(input)) { (stream, next) =>
+        stream.flatMap(v => eval(next, v))
+      }
+
+    case ListFieldTerm(fields) =>
+      // Sequential application of identifier indices, e.g. `.foo.bar`
+      fields.toList.foldLeft(Vector(input)) { (stream, field) =>
+        stream.flatMap(v => evalField(field.name, field.optional, v))
+      }
+
+    case IndexTerm(target, indexExp, optional) =>
+      eval(target, input).flatMap { v =>
+        // In jq, the index expression is evaluated with `.` being the indexed value.
+        // This repo historically evaluated it against the current value.
+        val indexValues = eval(indexExp, v)
+        if (indexValues.isEmpty) Vector(Json.Null)
+        else indexValues.flatMap(idx => evalIndex(idx, optional, v))
+      }
+
+    case IteratorTerm(target, optional) =>
+      eval(target, input).flatMap(v => evalIterator(v, optional))
+
+    case SliceTerm(target, startExp, endExp, optional) =>
+      eval(target, input).flatMap { v =>
+        val startIdxOpt = startExp.flatMap(t => evalAsInt(t, v))
+        val endIdxOpt = endExp.flatMap(t => evalAsInt(t, v))
+        evalSlice(v, startIdxOpt, endIdxOpt, optional)
+      }
+
+    case other => throw new InvalidTermType(other)
   }
 
-  def term(term: Term): RuntimeF = term match {
-    case IdentityTerm => identity
-    case ListFieldTerm(fields) =>
-      composeList(
-        fields.map(f => Runtime.field(Json.fromString(f.name), f.optional))
-      )
-
-    case ListTerm(terms)    => Runtime.list(terms)
-    case NumberTerm(value)  => Runtime.number(value)
-    case BooleanTerm(value) => Runtime.boolean(value)
-    case RecTerm            => Runtime.rec
-    case SliceTerm(term, start, end, optional) =>
-      Runtime.slice(term, start, end, optional)
-    case IndexTerm(term, exp, optional) => Runtime.index(term, exp, optional)
-    case NullTerm                       => Runtime.`null`
-    case StringTerm(value)              => Runtime.string(value)
-    case term                           => throw new InvalidTermType(term)
+  /** Backwards-compatible single-value evaluation used by legacy call sites. If
+    * multiple outputs exist, they are collected into an array.
+    */
+  def term(term: Term): Json => Json = { input =>
+    val out = eval(term, input)
+    out match {
+      case Vector()    => Json.Null
+      case Vector(one) => one
+      case many        => Json.arr(many: _*)
+    }
   }
 
   def termsToJsArray(terms: NonEmptyList[Term], data: Json): Json = {
-
-    val headTerm: Json = Runtime.term(terms.head)(data)
-    if (terms.tail.isEmpty) {
-      Json.arr(headTerm)
-    } else {
-      Json.arr(
-        headTerm,
-        termsToJsArray(NonEmptyList.fromListUnsafe(terms.tail), data)
-      )
-    }
+    Json.arr(terms.toList.map(t => term(t)(data)): _*)
   }
 
-  private def rec: RuntimeF = RuntimeF {
-    case value if value.isArray =>
-      rec(value.asArray.get.head)
-    case value => value
-  }
+  private def evalAsInt(term: Term, input: Json): Option[Int] =
+    eval(term, input).headOption.flatMap(_.asNumber.flatMap(_.toInt))
 
-  private val identity = RuntimeF { data => data }
-
-  private val `null` = RuntimeF { _ => Json.Null }
-
-  private def string(value: String) = RuntimeF { _ => Json.fromString(value) }
-
-  private def number(value: Double) = RuntimeF { _ =>
-    Json.fromDoubleOrNull(value)
-  }
-  private def boolean(value: Boolean) = RuntimeF { _ =>
-    Json.fromBoolean(value)
-  }
-
-  private def list(terms: NonEmptyList[Term]): RuntimeF = RuntimeF { data =>
-    if (terms.tail.isEmpty) {
-      Runtime.term(terms.head)(data)
-    } else {
-      Runtime.list(NonEmptyList.fromListUnsafe(terms.tail))(
-        Runtime.term(terms.head)(data)
-      )
-    }
-  }
-
-  private def field(input: Json, optional: Boolean): RuntimeF = RuntimeF {
-    data =>
-      input match {
-        case _ if input.isNumber =>
-          val n = input.asNumber.get.toInt
-            .getOrElse(throw new Exception("invalid numeric input"))
-          data.asArray match {
-            case Some(value) if n >= 0 && n < value.length => value(n.toInt)
-            case Some(value) if n < 0 =>
-              val reverseIndex = value.length + n.toInt
-              if (reverseIndex >= 0) {
-                value(reverseIndex)
-              } else {
-                Json.Null
-              }
-            case _ => optionalResult(optional, input, data)
-          }
-
-        case _ if input.isString =>
-          (data \\ input.asString.get).headOption match {
-            case Some(value) => value
-            case None =>
-              data.asArray match {
-                case Some(value) =>
-                  Json.arr(
-                    value.map(node =>
-                      (node \\ input.asString.get).headOption
-                        .getOrElse(optionalResult(optional, input, data))
-                    ): _*
-                  )
-                case None => optionalResult(optional, input, data)
-              }
-
-          }
-        case _ if input.isNull => data
-        case e                 => throw new Exception(s"field $e not supported")
-      }
-  }
-
-  private def index(term: Term, index: Term, opt: Boolean) = RuntimeF { input =>
-    val termFunction = Runtime.term(term)
-    val indexFunction = Runtime.term(index)
-    val trm = termFunction(input)
-    val idx = indexFunction(trm)
-
-    Runtime.field(idx, opt)(trm)
-  }
-
-  private def slice(
-      trm: Term,
-      startExp: Term,
-      endExp: Term,
-      opt: Boolean
-  ) = RuntimeF { input =>
-    val termFunction = Runtime.term(trm)
-    val startFunction = Runtime.term(startExp)
-    val endFunction = Runtime.term(endExp)
-    val term: Json = termFunction(input)
-
-    val startIdx = startFunction(term).asNumber
-      .flatMap(_.toInt)
-      .getOrElse(throw new Exception("Int expected"))
-    val endIdx = endFunction(term).asNumber
-      .flatMap(_.toInt)
-      .getOrElse(throw new Exception("Int expected"))
-
-    term match {
-      case _ if term.isArray =>
-        val indices = startIdx until endIdx
-        val functions: Seq[RuntimeF] =
-          indices.map(idx => Runtime.index(trm, NumberTerm(idx.toDouble), opt))
-        Json.arr(functions.map(f => f(input)): _*)
-
-      case _ if term.isString =>
-        Json.fromString(term.asString.get.substring(startIdx, endIdx))
-      case e =>
-        throw new Exception(s"input $e not supported")
-    }
-  }
-
-  private def optionalResult(
+  private def evalField(
+      name: String,
       optional: Boolean,
-      field: Json,
       input: Json
-  ): Json = {
-    if (optional) {
-      Json.Null
-    } else {
-      throw new IllegalArgumentException(
-        s"input $input not supported, $field"
-      )
+  ): Vector[Json] = {
+    input.asObject match {
+      case Some(obj) => Vector(obj(name).getOrElse(Json.Null))
+      case None      =>
+        // jq: .foo on null yields null; .foo? on wrong type yields empty
+        if (input.isNull) Vector(Json.Null)
+        else if (optional) Vector.empty // jq-conform: try semantics -> empty
+        else
+          throw new IllegalArgumentException(
+            s"input $input not supported, .$name"
+          )
     }
   }
 
-  private def composeList(lst: NonEmptyList[RuntimeF]): RuntimeF =
-    lst.foldLeft(identity) { (acc, next) =>
-      RuntimeF { input =>
-        val previousResult = acc(input)
-        next(previousResult)
-      }
+  private def evalIndex(
+      index: Json,
+      optional: Boolean,
+      input: Json
+  ): Vector[Json] = {
+    index.asNumber.flatMap(_.toInt) match {
+      case Some(i) =>
+        input.asArray match {
+          case Some(arr) =>
+            val idx = if (i < 0) arr.length + i else i
+            if (idx >= 0 && idx < arr.length) Vector(arr(idx))
+            else Vector(Json.Null)
+          case None =>
+            // jq-conform: .[i]? on wrong type -> empty
+            if (optional) Vector.empty
+            else
+              throw new IllegalArgumentException(
+                s"input $input not supported, .[$i]"
+              )
+        }
+
+      case None =>
+        index.asString match {
+          case Some(key) =>
+            input.asObject match {
+              case Some(obj) => Vector(obj(key).getOrElse(Json.Null))
+              case None      =>
+                // jq-conform: .["key"]? on wrong type -> empty
+                if (optional) Vector.empty
+                else
+                  throw new IllegalArgumentException(
+                    s"input $input not supported, .[\"$key\"]"
+                  )
+            }
+          case None =>
+            if (optional) Vector.empty
+            else
+              throw new IllegalArgumentException(s"index $index not supported")
+        }
     }
+  }
+
+  private def evalIterator(input: Json, optional: Boolean): Vector[Json] = {
+    input.asArray match {
+      case Some(arr) => arr.toVector
+      case None =>
+        input.asObject match {
+          case Some(obj) => obj.values.toVector
+          case None =>
+            if (optional) Vector.empty
+            else
+              throw new IllegalArgumentException(
+                s"input $input not supported, .[]"
+              )
+        }
+    }
+  }
+
+  private def clampSliceIndex(i: Int, length: Int): Int = {
+    val resolved = if (i < 0) length + i else i
+    math.max(0, math.min(length, resolved))
+  }
+
+  private def evalSlice(
+      input: Json,
+      startIdx: Option[Int],
+      endIdx: Option[Int],
+      optional: Boolean
+  ): Vector[Json] = {
+    input.asArray match {
+      case Some(arr) =>
+        val start = clampSliceIndex(startIdx.getOrElse(0), arr.length)
+        val end = clampSliceIndex(endIdx.getOrElse(arr.length), arr.length)
+        Vector(Json.arr(arr.slice(start, end): _*))
+
+      case None =>
+        input.asString match {
+          case Some(str) =>
+            val start = clampSliceIndex(startIdx.getOrElse(0), str.length)
+            val end = clampSliceIndex(endIdx.getOrElse(str.length), str.length)
+            Vector(Json.fromString(str.substring(start, end)))
+          case None =>
+            // jq-conform: slice? on wrong type -> empty
+            if (optional) Vector.empty
+            else
+              throw new IllegalArgumentException(
+                s"input $input not supported, slice"
+              )
+        }
+    }
+  }
+
+  private def recursiveDescent(input: Json): Vector[Json] = {
+    val children: Vector[Json] =
+      input.asArray
+        .map(_.toVector)
+        .orElse(input.asObject.map(_.values.toVector))
+        .getOrElse(Vector.empty)
+
+    Vector(input) ++ children.flatMap(recursiveDescent)
+  }
 }

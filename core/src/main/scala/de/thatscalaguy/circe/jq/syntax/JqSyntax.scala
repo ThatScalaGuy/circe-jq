@@ -19,9 +19,9 @@ package de.thatscalaguy.circe.jq.syntax
 import de.thatscalaguy.circe.jq.parser.combinedParser
 import de.thatscalaguy.circe.jq.exceptions._
 import io.circe.Json
-import cats.data.NonEmptyList
 import de.thatscalaguy.circe.jq._
 import de.thatscalaguy.circe.jq.{Runtime => R}
+import io.circe.JsonObject
 
 trait JqSyntax {
   implicit def jqOps[F[_], A](wrapped: Json): JqOps =
@@ -34,51 +34,70 @@ private final case class JqFunction(fn: Json => Json) {
 
 final class JqOps private[syntax] (wrapped: Json) {
 
-  private def runFilter(terms: NonEmptyList[ListTerm], data: Json): Json =
-    terms match {
-      case NonEmptyList(head, tail) if tail.isEmpty => runTerm(head.terms, data)
-      case NonEmptyList(head, tail) =>
-        runFilter(NonEmptyList.fromListUnsafe(tail), runTerm(head.terms, data))
+  private def runStage(stage: ListTerm, data: Json): Vector[Json] =
+    // Comma semantics: evaluate each atom on the same input and concatenate.
+    stage.terms.toList.toVector.flatMap(t => R.eval(t, data))
+
+  private def runFilterAll(filter: Filter, data: Json): Vector[Json] =
+    // Pipe semantics: feed each output of the left stage into the next.
+    filter.terms.toList.foldLeft(Vector(data)) { (stream, stage) =>
+      stream.flatMap(in => runStage(stage, in))
     }
 
-  private def runTerm(terms: NonEmptyList[Term], data: Json): Json =
-    terms match {
-      case NonEmptyList(head, tail) if tail.isEmpty =>
-        R.term(head)(data)
-      case nel => R.termsToJsArray(nel, data)
-    }
-
-  private def runObject(obj: Object, data: Json): Json = {
-    obj.nodes
-      .map { pair =>
-        val name = pair.name match {
-          case f: Filter => runFilter(f.terms, data).asString.get
-          case s: String => s
-          case e => throw new Exception(s"unable to handle expression $e")
+  private def runObjectAll(obj: Object, data: Json): Vector[Json] = {
+    val out: Vector[JsonObject] =
+      obj.nodes.toList.foldLeft(Vector(JsonObject.empty)) { (objects, pair) =>
+        val keys: Vector[String] = pair.name match {
+          case s: String => Vector(s)
+          case f: Filter =>
+            runFilterAll(f, data).map {
+              case j if j.isString => j.asString.get
+              case other =>
+                throw new IllegalArgumentException(
+                  s"object key must be a string, got $other"
+                )
+            }
+          case other =>
+            throw new Exception(s"unable to handle expression $other")
         }
 
-        pair.value match {
+        val values: Vector[Json] = pair.value match {
+          case f: Filter => runFilterAll(f, data)
           case Array(filters) =>
-            Json.obj(name -> runFilter(filters.terms, data))
-          case Filter(terms) => Json.obj(name -> runFilter(terms, data))
-          case obj: Object   => Json.obj(name -> runObject(obj, data))
+            Vector(Json.arr(runFilterAll(filters, data): _*))
+          case o: Object => runObjectAll(o, data)
         }
+
+        for {
+          obj0 <- objects
+          k <- keys
+          v <- values
+        } yield obj0.add(k, v)
       }
-      .foldLeft(Json.obj())((a, b) => a.deepMerge(b))
+
+    out.map(Json.fromJsonObject)
   }
 
-  private def run(exp: Output, data: Json): Json = {
-    exp match {
-      case Filter(terms)  => runFilter(terms, data)
-      case Array(filters) => runFilter(filters.terms, data)
-      case obj: Object    => runObject(obj, data)
-    }
+  private def runAll(exp: Output, data: Json): Vector[Json] = exp match {
+    case f: Filter      => runFilterAll(f, data)
+    case Array(filters) => Vector(Json.arr(runFilterAll(filters, data): _*))
+    case o: Object      => runObjectAll(o, data)
   }
 
-  def jq(query: String): Json = {
+  /** Returns all jq outputs (jq is stream-oriented).
+    */
+  def jqAll(query: String): Vector[Json] =
     combinedParser.parseAll(query) match {
       case Left(value)  => throw new InvalidExpression(query, value)
-      case Right(value) => run(value, wrapped)
+      case Right(value) => runAll(value, wrapped)
+    }
+
+  def jq(query: String): Json = {
+    val out = jqAll(query)
+    out match {
+      case Vector()    => Json.Null
+      case Vector(one) => one
+      case many        => Json.arr(many: _*)
     }
   }
 }
