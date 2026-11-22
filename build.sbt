@@ -23,6 +23,9 @@ val Scala3 = "3.3.1"
 ThisBuild / crossScalaVersions := Seq(Scala213, Scala3)
 ThisBuild / scalaVersion := Scala213 // the default Scala
 
+// Scala.js linker hangs on JDK 8
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"))
+
 lazy val root = tlCrossRootProject.aggregate(core)
 
 lazy val core = crossProject(JVMPlatform, JSPlatform)
