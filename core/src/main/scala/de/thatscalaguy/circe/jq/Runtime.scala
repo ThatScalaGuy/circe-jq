@@ -26,16 +26,16 @@ object Runtime {
   }
 
   def term(term: Term): RuntimeF = term match {
-    case IdentityTerm => identity
+    case IdentityTerm          => identity
     case ListFieldTerm(fields) =>
       composeList(
         fields.map(f => Runtime.field(Json.fromString(f.name), f.optional))
       )
 
-    case ListTerm(terms)    => Runtime.list(terms)
-    case NumberTerm(value)  => Runtime.number(value)
-    case BooleanTerm(value) => Runtime.boolean(value)
-    case RecTerm            => Runtime.rec
+    case ListTerm(terms)                       => Runtime.list(terms)
+    case NumberTerm(value)                     => Runtime.number(value)
+    case BooleanTerm(value)                    => Runtime.boolean(value)
+    case RecTerm                               => Runtime.rec
     case SliceTerm(term, start, end, optional) =>
       Runtime.slice(term, start, end, optional)
     case IndexTerm(term, exp, optional) => Runtime.index(term, exp, optional)
@@ -94,7 +94,7 @@ object Runtime {
             .getOrElse(throw new Exception("invalid numeric input"))
           data.asArray match {
             case Some(value) if n >= 0 && n < value.length => value(n.toInt)
-            case Some(value) if n < 0 =>
+            case Some(value) if n < 0                      =>
               val reverseIndex = value.length + n.toInt
               if (reverseIndex >= 0) {
                 value(reverseIndex)
@@ -107,7 +107,7 @@ object Runtime {
         case _ if input.isString =>
           (data \\ input.asString.get).headOption match {
             case Some(value) => value
-            case None =>
+            case None        =>
               data.asArray match {
                 case Some(value) =>
                   Json.arr(
