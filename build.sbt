@@ -1,6 +1,6 @@
 lazy val V = new {
   val circe = "0.14.17"
-  val munit = "0.7.29"
+  val munit = "1.3.6"
   val catsParse = "0.3.10"
 }
 
