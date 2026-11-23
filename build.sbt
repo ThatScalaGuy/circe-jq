@@ -1,7 +1,7 @@
 lazy val V = new {
   val circe = "0.14.17"
   val munit = "1.3.6"
-  val catsParse = "0.3.10"
+  val catsParse = "1.1.0"
 }
 
 ThisBuild / tlBaseVersion := "0.1" // your current series x.y
