@@ -15,16 +15,16 @@ ThisBuild / developers := List(
   tlGitHubDev("ThatScalaGuy", "Sven Herrmann")
 )
 
-// publish to s01.oss.sonatype.org (set to true to publish to oss.sonatype.org instead)
-ThisBuild / tlSonatypeUseLegacyHost := false
-
 // publish website from this branch
 ThisBuild / tlSitePublishBranch := Some("main")
 
-val Scala213 = "2.13.12"
+val Scala213 = "2.13.18"
 val Scala3 = "3.3.1"
 ThisBuild / crossScalaVersions := Seq(Scala213, Scala3)
 ThisBuild / scalaVersion := Scala213 // the default Scala
+
+// Scala.js linker hangs on JDK 8
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"))
 
 lazy val root = tlCrossRootProject.aggregate(core)
 
@@ -40,4 +40,14 @@ lazy val core = crossProject(JVMPlatform, JSPlatform)
     )
   )
 
-lazy val docs = project.in(file("site")).enablePlugins(TypelevelSitePlugin)
+lazy val docs = project
+  .in(file("site"))
+  .enablePlugins(TypelevelSitePlugin)
+  .settings(
+    tlSiteHelium := tlSiteHelium.value.site.topNavigationBar(
+      homeLink = laika.helium.config.IconLink.internal(
+        laika.ast.Path.Root / "index.md",
+        laika.helium.config.HeliumIcon.home
+      )
+    )
+  )
