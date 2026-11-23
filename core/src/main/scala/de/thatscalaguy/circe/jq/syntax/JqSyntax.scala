@@ -37,7 +37,7 @@ final class JqOps private[syntax] (wrapped: Json) {
   private def runFilter(terms: NonEmptyList[ListTerm], data: Json): Json =
     terms match {
       case NonEmptyList(head, tail) if tail.isEmpty => runTerm(head.terms, data)
-      case NonEmptyList(head, tail) =>
+      case NonEmptyList(head, tail)                 =>
         runFilter(NonEmptyList.fromListUnsafe(tail), runTerm(head.terms, data))
     }
 

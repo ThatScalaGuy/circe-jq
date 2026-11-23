@@ -40,7 +40,7 @@ object FilterParser {
   }
 
   private val sliceOrIndexModel = sliceOrIndex.map {
-    case (Left(t), opt) => SliceOrIndexModel(t, None, opt.isDefined)
+    case (Left(t), opt)         => SliceOrIndexModel(t, None, opt.isDefined)
     case (Right((t1, t2)), opt) =>
       SliceOrIndexModel(t1, Some(t2), opt.isDefined)
     case _ => SliceOrIndexModel(NullTerm, None, false)
@@ -68,7 +68,7 @@ object FilterParser {
   }
 
   private def wrapTerm(term: Term, model: Option[Model]): Term = model match {
-    case None => term
+    case None                                                => term
     case Some(SliceOrIndexModel(start, Some(end), optional)) =>
       SliceTerm(term, start, end, optional)
     case Some(SliceOrIndexModel(start, None, optional)) =>
